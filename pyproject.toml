@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "academic-landscape-analyzer"
+version = "0.1.0"
+description = "Evidence-traceable analysis of a closed corpus of academic PDFs"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dependencies = [
+  "PyMuPDF>=1.24",
+  "qdrant-client>=1.19",
+  "openai>=1.50",
+  "neo4j>=6.3",
+  # Directly imported at module top, so declared directly rather than relied
+  # on as transitive deps. Found missing in the v0.2 global audit: a clean
+  # install ImportErrored on these five before doing any work.
+  "numpy>=1.26",
+  "pydantic>=2.7",
+  "scikit-learn>=1.4",
+]
+
+[project.scripts]
+academic-landscape = "academic_landscape.cli:main"
+
+[project.optional-dependencies]
+# Local, offline embeddings. torch + sentence-transformers are heavy and are
+# imported lazily only inside LocalEmbeddingBackend, so they stay out of the
+# core install; API embeddings are the default route. Install with
+# `pip install .[local-embedding]` to run embeddings locally.
+local-embedding = [
+  "sentence-transformers>=2.7",
+  "torch>=2.2",
+]
+# Real Graphiti temporal projection uses the project Neo4j on Windows. Its
+# upstream wheel omits httpx even though it imports it, so declare it directly.
+# FalkorDBLite is intentionally excluded: upstream redislite rejects win32.
+# (The LightRAG retrieval projection was removed 2026-09-27 on user request —
+# GTI is now the sole optional projection engine.)
+graphiti = [
+  "graphiti-core==0.30.2",
+  "httpx>=0.28,<1",
+]
+# Pinned on purpose. ruff's rule set widens between minor versions: on this
+# identical source, 0.15.10 reports nothing and 0.16.8 reports 111 style/typing
+# findings (UP035, I001, PYI036, ...). A lint gate whose result depends on
+# whichever ruff the reader happens to install is not a gate, so the toolchain
+# is pinned instead of rewriting the code to chase a moving target.
+dev = [
+  "pytest==9.1.1",
+  "pytest-asyncio==1.3.0",
+  "ruff==0.15.10",
+]
+
+[tool.ruff]
+# Belt and braces: even if a different ruff is used, keep the rule set this
+# project is actually gated on, so the gate cannot silently widen.
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

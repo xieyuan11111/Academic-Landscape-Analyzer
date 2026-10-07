@@ -1,0 +1,21 @@
+# runtime/ holds run/audit scripts (keep in version control) plus generated
+# outputs (ignore). The previous `runtime/` + `!runtime/*.py` pair tracked
+# NOTHING: git cannot re-include a file inside an excluded directory, so every
+# run script and every acceptance-audit script was unversioned. Un-exclude the
+# directories first, then the script files.
+runtime/**
+!runtime/**/
+!runtime/**/*.py
+__pycache__/
+*.pyc
+.env
+# `.env` alone does not match `.env.local` / `.env.production`; without these
+# two lines a single `git add -A` writes credentials into the history that is
+# meant to be handed to other people.
+.env.*
+!.env.example
+.venv/
+# Build artifacts from `python -m build` / pip wheel; never hand these out.
+build/
+dist/
+*.egg-info/

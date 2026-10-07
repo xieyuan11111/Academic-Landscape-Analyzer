@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>academic-landscape-analyzer 当前架构（2026-09-27 实读代码）</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --line:#2a323d;
+    --auth:#7ee787; --llm:#ffa657; --vec:#79c0ff; --graph:#d2a8ff;
+    --gti:#ff7b72; --out:#a5d6ff; --mute:#8b949e; --rebuild:#f0883e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#e6edf3;
+       font-family:"Cascadia Code","Consolas","Microsoft YaHei",monospace;line-height:1.55}
+  .wrap{max-width:1500px;margin:0 auto;padding:28px 22px 70px}
+  h1{font-size:21px;margin:0 0 6px;color:#fff}
+  .sub{color:var(--mute);font-size:12.5px;margin-bottom:24px}
+  .banner{background:#1c2128;border-left:3px solid var(--gti);padding:12px 15px;
+          margin:0 0 22px;font-size:12.5px;border-radius:0 4px 4px 0}
+  .banner b{color:var(--gti)}
+  h2{font-size:15px;margin:30px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);color:#fff}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;font-size:11.5px}
+  .lg{display:flex;align-items:center;gap:6px;background:var(--panel);
+      border:1px solid var(--line);padding:5px 10px;border-radius:4px}
+  .sw{width:11px;height:11px;border-radius:2px;display:inline-block}
+  .layer{background:var(--panel);border:1px solid var(--line);border-radius:6px;
+         padding:16px 18px;margin-bottom:14px}
+  .lname{font-size:13px;font-weight:600;margin-bottom:3px}
+  .lrole{font-size:11.5px;color:var(--mute);margin-bottom:12px}
+  .nodes{display:flex;flex-wrap:wrap;gap:9px}
+  .node{border:1px solid;border-radius:5px;padding:9px 12px;min-width:150px;flex:1;max-width:290px}
+  .node .nm{font-size:12px;font-weight:600;margin-bottom:3px}
+  .node .fl{font-size:10.5px;opacity:.85;font-family:Consolas,monospace}
+  .node .note{font-size:10.5px;color:var(--mute);margin-top:5px;line-height:1.4}
+  .auth{border-color:var(--auth);background:rgba(126,231,135,.07)} .auth .nm{color:var(--auth)}
+  .llm{border-color:var(--llm);background:rgba(255,166,87,.07)} .llm .nm{color:var(--llm)}
+  .vec{border-color:var(--vec);background:rgba(121,192,255,.07)} .vec .nm{color:var(--vec)}
+  .graph{border-color:var(--graph);background:rgba(210,168,255,.07)} .graph .nm{color:var(--graph)}
+  .gti{border-color:var(--gti);background:rgba(255,123,114,.07)} .gti .nm{color:var(--gti)}
+  .out{border-color:var(--out);background:rgba(165,214,255,.07)} .out .nm{color:var(--out)}
+  .rebuild{border-color:var(--rebuild);background:rgba(240,136,62,.07)} .rebuild .nm{color:var(--rebuild)}
+  .flow{margin:12px 0 4px;font-size:12px}
+  .flow .step{display:inline-block;background:#1c2128;border:1px solid var(--line);
+              border-radius:4px;padding:5px 10px;margin:3px 5px 3px 0}
+  .flow .arr{color:var(--mute);margin:0 3px}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#1c2128;color:#fff;font-weight:600}
+  code{background:#1c2128;padding:1px 5px;border-radius:3px;color:var(--out);font-size:11.5px}
+  .warn{color:var(--gti)} .ok{color:var(--auth)} .mid{color:var(--llm)}
+  ul{margin:6px 0;padding-left:20px;font-size:12.5px} li{margin:4px 0}
+  .fig{margin:16px 0 26px}
+  svg{width:100%;height:auto;display:block;background:#0b0e13;
+      border:1px solid var(--line);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>academic-landscape-analyzer · 当前真实架构</h1>
+<div class="sub">2026-09-27 · 依据 54 个源模块 / 13,611 行实读绘制 · 灰底=可重建投影，红=GTI</div>
+
+<div class="banner">
+<b>⚠ 命名陷阱，先说清：</b>代码里有三处容易被误读的地方。图上已按实际行为标注：<br>
+1) <code>graphiti_runtime.py</code>（770 行，legacy <code>add_triplet</code> 脚手架）——<span class="warn">无任何生产调用方</span>，是死代码，未接入。<br>
+2) <code>temporal_projection.py</code> 的 docstring 仍写着「getzep/graphiti 既未安装也未声明」——<span class="warn">该句已过时</span>，实际 <code>graphiti-core==0.30.2</code> 已装且已声明。<br>
+3) <code>runtime/run_real_full.py</code> 里变量名 <code>gti_error</code> / 字段 <code>temporal_projection_error</code> —— <span class="warn">是历史命名残留</span>，实际调用的是自研 <code>TemporalProjector</code>，<b>不是</b> GTI。
+</div>
+
+<div class="legend">
+  <div class="lg"><span class="sw" style="background:var(--auth)"></span>权威层（不可重建）</div>
+  <div class="lg"><span class="sw" style="background:var(--llm)"></span>LLM 调用 + 校验</div>
+  <div class="lg"><span class="sw" style="background:var(--vec)"></span>向量 / 检索投影</div>
+  <div class="lg"><span class="sw" style="background:var(--graph)"></span>M4 图投影</div>
+  <div class="lg"><span class="sw" style="background:var(--gti)"></span>GTI（Graphiti，唯一可选外引擎）</div>
+  <div class="lg"><span class="sw" style="background:var(--rebuild)"></span>可重建输出</div>
+  <div class="lg"><span class="sw" style="background:var(--out)"></span>报告渲染</div>
+</div>
+
+<h2>① 权威层 · Authority（唯一事实来源）</h2>
+<div class="layer">
+  <div class="lname">不可重建 —— 删了就得重跑 PDF 解析</div>
+  <div class="lrole">原始 PDF → 快照 + 分页文本 + 逐字引文。证据契约的物理落点。</div>
+  <div class="nodes">
+    <div class="node auth"><div class="nm">原始 PDF 语料</div><div class="fl">build_snapshot()</div>
+      <div class="note">211 PDF / 209 篇去重 / 2 重复 / 11 DOCX / 1 ZIP / 1 CAJ</div></div>
+    <div class="node auth"><div class="nm">CorpusSnapshot</div><div class="fl">models.py · snapshot.py</div>
+      <div class="note">不可变快照：snapshot_id + 文档 + 分页文本</div></div>
+    <div class="node auth"><div class="nm">SQLiteEvidenceStore</div><div class="fl">sqlite_store.py</div>
+      <div class="note">snapshots/artifacts/pages/documents/evidence 表 + FTS5 全文索引；幂等写</div></div>
+    <div class="node auth"><div class="nm">EvidenceSpan</div><div class="fl">sqlite_store.py</div>
+      <div class="note">evidence_id·paper_id·page·quote·locator·type；MAG-209 共 2,370 条</div></div>
+  </div>
+</div>
+
+<h2>② 证据抽取 · Evidence Contract（LLM 只给锚点，引文由代码定位）</h2>
+<div class="layer">
+  <div class="lname">两阶段抽取 + 严格证据闸门</div>
+  <div class="lrole">关键设计：<b>模型永远不抄引文</b>。模型只给短 hint + 页码，代码在原文里定位并扩展到句子边界。</div>
+  <div class="flow">
+    <span class="step">Stage1 anchor: 模型给 hint+page</span><span class="arr">→</span>
+    <span class="step">quote_resolver 定位+扩句</span><span class="arr">→</span>
+    <span class="step">_validate_payload 闸门</span><span class="arr">→</span>
+    <span class="step">Stage2 只见已验证证据</span><span class="arr">→</span>
+    <span class="step">Pydantic 强类型</span>
+  </div>
+  <div class="nodes">
+    <div class="node llm"><div class="nm">Stage 1 · 锚点</div><div class="fl">prompts.build_anchor_hint_prompt</div>
+      <div class="note">输出 anchors[{evidence_id, hint, page_number}]；hint 短，不要求逐字</div></div>
+    <div class="node llm"><div class="nm">quote_resolver</div><div class="fl">quote_resolver.py</div>
+      <div class="note">有序子序列匹配 min_score=0.6；扩展到句界；clamp 保 anchor；max_quote_len=500</div></div>
+    <div class="node llm"><div class="nm">Stage 2 · 研究卡</div><div class="fl">paper_extraction.py</div>
+      <div class="note">只能引用 Stage1 已验证证据；提交新证据 → <code>research_card_new_evidence</code></div></div>
+    <div class="node llm"><div class="nm">semantic.validate_analysis_payload</div><div class="fl">semantic.py</div>
+      <div class="note">quote_exists / 归属 / 证据类型类型系统；失败即 ValueError</div></div>
+    <div class="node llm"><div class="nm">PaperExtractionResult</div><div class="fl">paper_extraction.py</div>
+      <div class="note">question/concepts/frameworks/methods/data/contexts/results/limitations/claims/evidence</div></div>
+  </div>
+</div>
+
+<h2>③ 主编排 · LandscapePipeline.run()（pipeline.py 446 行）</h2>
+<div class="layer">
+  <div class="lname">全链路串联 —— 每一层都独立可测</div>
+  <div class="lrole">run() 的真实调用顺序（逐行核对 pipeline.py L104–L446）：</div>
+  <div class="flow">
+    <span class="step">populate 检索索引</span><span class="arr">→</span>
+    <span class="step">语义条目+双向量</span><span class="arr">→</span>
+    <span class="step">聚类(清洗闸门)</span><span class="arr">→</span>
+    <span class="step">方向命名</span><span class="arr">→</span>
+    <span class="step">方向内对比</span><span class="arr">→</span>
+    <span class="step">概念线程阶段重建</span><span class="arr">→</span>
+    <span class="step">跨论文关系抽取</span><span class="arr">→</span>
+    <span class="step">证据族独立性</span><span class="arr">→</span>
+    <span class="arr">→</span>
+    <span class="step">源卡+证据层级</span><span class="arr">→</span>
+    <span class="step">争议卡</span><span class="arr">→</span>
+    <span class="arr">→</span>
+    <span class="step">前沿/创新/流行度</span><span class="arr">→</span>
+    <span class="step">跨方向合并</span><span class="arr">→</span>
+    <span class="step">时态事件归一化</span><span class="arr">→</span>
+    <span class="step">图投影(fail-soft)</span>
+  </div>
+  <div class="nodes">
+    <div class="node vec"><div class="nm">semantic_items</div><div class="fl">build_semantic_items</div>
+      <div class="note">抽取结果 → 扁平语义条目</div></div>
+    <div class="node vec"><div class="nm">clustering</div><div class="fl">cluster_items(n=√(N/2) 上限12)</div>
+      <div class="note">双向量（描述+名称）；清洗闸门</div></div>
+    <div class="node llm"><div class="nm">direction_naming</div><div class="fl">name_directions</div>
+      <div class="note">有界命名；低内聚 → <code>pending_review</code></div></div>
+    <div class="node llm"><div class="nm">cross_paper</div><div class="fl">compare_directions</div>
+      <div class="note">方向内 bounded comparison</div></div>
+    <div class="node llm"><div class="nm">stage_reconstruction</div><div class="fl">reconstruct_stages</div>
+      <div class="note">概念线程；三试+确定性分块回退</div></div>
+    <div class="node llm"><div class="nm">relation_extraction</div><div class="fl">extract_paper_relations</div>
+      <div class="note">12 类关系；方向级断点缓存；fail-closed</div></div>
+    <div class="node llm"><div class="nm">evidence_family</div><div class="fl">analyze_evidence_families</div>
+      <div class="note">181 族/24 团队/8 综述类；<code>split_author_list</code></div></div>
+    <div class="node llm"><div class="nm">source_cards + evidence_tier</div><div class="fl">source_cards.py · evidence_tier.py</div>
+      <div class="note">四层：一手435/二手89/综合41/未决7083</div></div>
+    <div class="node llm"><div class="nm">debate_cards</div><div class="fl">build_debate_card</div>
+      <div class="note">24 张；同一个问题多张卡=表面分散</div></div>
+    <div class="node llm"><div class="nm">frontier_analysis</div><div class="fl">build_frontier_report</div>
+      <div class="note">流行度/创新度/前沿</div></div>
+    <div class="node llm"><div class="nm">landscape_merge</div><div class="fl">merge_frontier_signals</div>
+      <div class="note">direction_id::name 向量键，跨方向同概念合并</div></div>
+    <div class="node graph"><div class="nm">timeline_events</div><div class="fl">normalize_events</div>
+      <div class="note">1,866 事件；invalid_at=支持性失效</div></div>
+    <div class="node graph"><div class="nm">graph_projector</div><div class="fl">Neo4jProjector.project</div>
+      <div class="note">AcademicLandscapeNode；3,999 节点/13,420 边；fail-soft</div></div>
+  </div>
+  <div style="margin-top:12px;font-size:11.5px;color:var(--mute)">
+    <b>顺序陷阱：</b>证据族必须在源卡之前算，因为证据层级判定需要独立性信号（共享数据集/团队），
+    而 <code>classify_evidence_tier</code> 需要 <code>supporting_papers</code>。<code>run()</code> L192–194 的注释明确写了这一点。
+  </div>
+</div>
+
+<h2>④ 可重建投影 · Rebuildable Projections（删了重跑即可）</h2>
+<div class="layer">
+  <div class="lname">M5 混合检索 + M4 图 + 自研时态</div>
+  <div class="lrole">全部 fail-soft：投影失败绝不能丢弃已完成的分析或报告。</div>
+  <div class="nodes">
+    <div class="node vec"><div class="nm">RetrievalIndex</div><div class="fl">retrieval_index.py</div>
+      <div class="note">M5 门面：chunking+embedding+SQLite FTS+Qdrant+Neo4j 混合检索</div></div>
+    <div class="node vec"><div class="nm">HybridRetriever</div><div class="fl">retrieval.py</div>
+      <div class="note">EvidenceBundle：lexical_hits + vector_hits；<b>非权威</b>，仅发现用</div></div>
+    <div class="node vec"><div class="nm">Qdrant</div><div class="fl">embedding.py</div>
+      <div class="note">8,772 chunk 向量；默认 SiliconFlow BAAI/bge-m3 / 1024 维</div></div>
+    <div class="node graph"><div class="nm">Neo4j M4</div><div class="fl">graph_projector.py</div>
+      <div class="note">AcademicLandscapeNode；12 类关系边；snapshot 命名空间隔离</div></div>
+    <div class="node graph"><div class="nm">TemporalProjector</div><div class="fl">temporal_projection.py</div>
+      <div class="note">EvolutionEventNode + EVOLVES_TO；<b>自研</b>，非 getzep 库；valid_at/invalid_at</div></div>
+    <div class="node rebuild"><div class="nm">QdrantLocal</div><div class="fl">qdrant-local/</div>
+      <div class="note">r6/full 实际用 local 模式（远程 6333 当时不可用）</div></div>
+  </div>
+</div>
+
+<h2>⑤ GTI（Graphiti）· 唯一可选外引擎</h2>
+<div class="layer">
+  <div class="lname">Graphiti 0.30.2 直写批量投影 —— 零 LLM、零重解释</div>
+  <div class="lrole">GTI 是 <b>可选</b>：默认关着，只有 <code>evaluate_temporal_parity.py</code> 真的调用它。生产主链不经过它。</div>
+  <div class="nodes">
+    <div class="node gti"><div class="nm">graphiti_projection</div><div class="fl">graphiti_projection.py 471 行</div>
+      <div class="note">ValidatedRelation/ValidatedTemporalEvent 契约；<code>no_authority_reinterpretation=True</code></div></div>
+    <div class="node gti"><div class="nm">add_nodes_and_edges_bulk</div><div class="fl">graphiti_core.utils.bulk_utils</div>
+      <div class="note">版本锁定内部 API；绕开 <code>add_triplet</code>（会 LLM 重解释）</div></div>
+    <div class="node gub" style="display:none"></div>
+    <div class="node gti"><div class="nm">graphiti_bulk_runtime</div><div class="fl">graphiti_bulk_runtime.py</div>
+      <div class="note">依赖懒加载；telemetry 导入前关；1024 维校验；不创建 public Graphiti</div></div>
+    <div class="node gti"><div class="nm">GraphitiBulkRuntimeHandle</div><div class="fl">—</div>
+      <div class="note">node/edge factories 强制填 name_embedding/fact_embedding</div>
+      <div class="note">readback 验证；ManifestEntry 幂等台账</div></div>
+    <div class="node gti"><div class="nm">engine_manifest_store</div><div class="fl">engine_manifest_store.py</div>
+      <div class="note">GTI-only 台账；<code>_VALID_ENGINES={"graphiti"}</code>；快照隔离</div></div>
+    <div class="node gti"><div class="nm">engine_dual_run</div><div class="fl">engine_dual_run.py</div>
+      <div class="note">relation_from_authority / temporal_event_from_authority 转换</div></div>
+    <div class="node rebuild"><div class="nm">对照评测</div><div class="fl">runtime/evaluate_temporal_parity.py</div>
+      <div class="note">自研 TemporalProjector vs GTI 直写 —— 唯一真实调用方</div></div>
+  </div>
+  <div style="margin-top:12px;font-size:11.5px;color:var(--mute)">
+    <b>为什么绕开 add_triplet：</b>公开的 <code>Graphiti.add_triplet</code> 会跑 LLM 解析/失效判定，
+    可能重解释已验证的学术证据 —— 证据契约会被绕过。直写批量接口写的是代码已判定的结果，
+    取的是代码已判定的结果。
+  </div>
+</div>
+</body>
+</html>
